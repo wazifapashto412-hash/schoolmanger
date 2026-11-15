@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>تعلیمی ادارہ منیجر</title>
+<style>
+:root{--ink:#10343a;--bg:#f2f6f7;--card:#fff;--main:#0f5c63;--acc:#e2a31d;--red:#b3261e;--ok:#1b7f4b;--line:#d5e0e2;box-sizing:border-box}
+@media (prefers-color-scheme:dark){:root{--ink:#e6f0f1;--bg:#0e1b1d;--card:#16282b;--main:#4fb3bb;--line:#2a4246}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:"Noto Nastaliq Urdu","Noto Naskh Arabic","Jameel Noori Nastaleeq",serif,system-ui;background:var(--bg);color:var(--ink);padding-top:env(safe-area-inset-top,0px);line-height:2}
+header{background:var(--main);color:#fff;padding:10px 16px;font-size:1.2rem;font-weight:700;position:sticky;top:0;z-index:5}
+@media (prefers-color-scheme:dark){header{color:#0e1b1d}}
+header{display:flex;align-items:center;gap:10px}header img{height:34px;width:34px;object-fit:contain;border-radius:6px;background:#fff}
+main{padding:12px 12px 110px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+nav button{flex:1;border:0;background:none;color:var(--ink);font:inherit;font-size:.85rem;padding:6px 2px;min-height:48px}
+nav button.on{color:var(--main);font-weight:700;border-top:3px solid var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:8px 0}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat b{display:block;font-size:1.5rem;color:var(--main)}
+input,select,textarea{width:100%;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);min-height:44px}
+button.p,button.s{font:inherit;border:0;border-radius:8px;padding:6px 14px;min-height:44px;cursor:pointer}
+button.p{background:var(--main);color:#fff}
+@media (prefers-color-scheme:dark){button.p{color:#0e1b1d}}
+button.s{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+button.d{color:var(--red)}
+.fab{position:fixed;left:14px;bottom:calc(70px + env(safe-area-inset-bottom,0px));z-index:6;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.seg{display:flex;gap:4px}.seg button{flex:1;min-height:40px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+.seg button.P{background:var(--ok);color:#fff}.seg button.A{background:var(--red);color:#fff}.seg button.L{background:var(--acc);color:#222}
+.due{color:var(--red);font-weight:700}.ok{color:var(--ok);font-weight:700}
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:20;display:flex;align-items:flex-end}
+.sheet{background:var(--card);width:100%;max-height:90%;overflow:auto;border-radius:16px 16px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px))}
+label{display:block;font-size:.9rem;margin-top:6px}
+.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:6px 16px;border-radius:20px;z-index:30}
+.muted{opacity:.7;font-size:.9rem}
+</style>
+</head>
+<body>
+<header id="h"></header>
+<main id="m"></main>
+<nav id="n"></nav>
+<div id="o"></div>
+<script>
+(function(){
+var K='school_db_v1',TABS=[['home','ہوم'],['stu','طلبہ'],['att','حاضری'],['fee','فیس'],['res','نتائج']];
+var db=load(),tab='home',q='',aCls='',aDate=today(),rq='',fq='';
+function empty(){return{students:[],att:{},fees:[],marks:[],settings:{name:'',logo:''}}}
+function load(){try{var d=JSON.parse(localStorage.getItem(K)||'null');if(!d)return empty();var e=empty();for(var k in e)if(!d[k]||typeof d[k]!==typeof e[k]||Array.isArray(d[k])!==Array.isArray(e[k]))d[k]=e[k];return d}catch(x){return empty()}}
+function save(){try{localStorage.setItem(K,JSON.stringify(db))}catch(x){toast('محفوظ نہیں ہو سکا')}}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function num(v){var n=parseFloat(v);return isFinite(n)?n:0}
+function toast(t){var e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(function(){e.remove()},2000)}
+function stu(id){return db.students.filter(function(s){return s.id===id})[0]}
+function paid(id){return db.fees.filter(function(f){return f.sid===id}).reduce(function(a,f){return a+f.amt},0)}
+function classes(){var c=[];db.students.forEach(function(s){if(s.cls&&c.indexOf(s.cls)<0)c.push(s.cls)});return c}
+function modal(title,fields,vals,onSave,extra){
+  vals=vals||{};var h='<div class="mask"><div class="sheet"><h3>'+esc(title)+'</h3>';
+  fields.forEach(function(f){var v=vals[f.k]==null?'':vals[f.k];h+='<label>'+esc(f.l)+'</label>';
+    if(f.t==='sel'){h+='<select data-k="'+f.k+'">'+f.o.map(function(o){return'<option value="'+esc(o[0])+'"'+(o[0]===v?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>'}
+    else if(f.t==='area'){h+='<textarea rows="6" dir="ltr" data-k="'+f.k+'">'+esc(v)+'</textarea>'}
+    else h+='<input data-k="'+f.k+'" type="'+(f.t||'text')+'" value="'+esc(v)+'"'+(f.t==='number'?' inputmode="decimal" min="0"':'')+'>'});
+  h+='<div class="row" style="margin-top:12px"><button class="p" id="ms">محفوظ کریں</button>'+(extra?'<button class="s d" id="mx">'+esc(extra.l)+'</button>':'')+'<button class="s" id="mc">بند کریں</button></div></div></div>';
+  $('#o').innerHTML=h;
+  $('#mc').onclick=close;
+  if(extra)$('#mx').onclick=function(){if(confirm('کیا آپ واقعی یہ کام کرنا چاہتے ہیں؟')){extra.f();close()}};
+  $('#ms').onclick=function(){var o={};document.querySelectorAll('#o [data-k]').forEach(function(e){o[e.dataset.k]=e.value.trim()});if(onSave(o)!==false)close()};
+}
+function close(){$('#o').innerHTML='';render()}
+function $(s){return document.querySelector(s)}
+function render(){
+  var S=db.settings;$('#h').innerHTML=(S.logo?'<img alt="" src="'+esc(S.logo)+'">':'')+'<span>'+esc(S.name||'تعلیمی ادارہ منیجر')+'</span>';
+  $('#n').innerHTML=TABS.map(function(t){return'<button data-t="'+t[0]+'" class="'+(t[0]===tab?'on':'')+'">'+t[1]+'</button>'}).join('');
+  document.querySelectorAll('#n button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render()}});
+  $('#m').innerHTML=({home:vHome,stu:vStu,att:vAtt,fee:vFee,res:vRes})[tab]();
+  bind();
+}
+function vHome(){
+  var td=today(),pr=0,tot=0,mo=td.slice(0,7),inc=0,due=0;
+  db.students.forEach(function(s){var r=(db.att[td+'|'+s.cls]||{})[s.id];if(r){tot++;if(r==='P')pr++}due+=Math.max(0,num(s.fee)-paid(s.id))});
+  db.fees.forEach(function(f){if((f.date||'').slice(0,7)===mo)inc+=f.amt});
+  return'<div class="grid"><div class="card stat">کل طلبہ<b>'+db.students.length+'</b></div><div class="card stat">کل کلاسیں<b>'+classes().length+'</b></div>'+
+  '<div class="card stat">آج کی حاضری<b>'+(tot?Math.round(pr*100/tot)+'%':'—')+'</b></div><div class="card stat">اس ماہ وصولی<b>'+inc+'</b></div></div>'+
+  '<div class="card stat">باقی واجبات<b class="due">'+due+'</b></div>'+
+  '<div class="card"><p>طالب علم شامل کرنے کے لیے "طلبہ" میں جائیں، پھر حاضری، فیس اور نتائج درج کریں۔ تمام ڈیٹا صرف اسی فون میں محفوظ رہتا ہے۔</p><div class="row"><button class="s" id="st">ادارے کا نام اور لوگو</button><button class="s" id="bk">بیک اپ / بحالی</button></div></div>';
+}
+function vStu(){
+  var l=db.students.filter(function(s){return !q.trim()||(s.name+' '+s.father+' '+s.cls+' '+s.roll+' '+(s.phone||'')).toLowerCase().indexOf(q.trim().toLowerCase())>=0});
+  return'<input id="q" placeholder="نام، رول نمبر، کلاس یا فون سے تلاش" value="'+esc(q)+'">'+(l.length?l.map(function(s){return'<div class="card row" data-e="'+s.id+'"><div><b>'+esc(s.name)+'</b><div class="muted">ولدیت: '+esc(s.father)+' | کلاس: '+esc(s.cls)+' | رول: '+esc(s.roll)+'</div></div><span>‹</span></div>'}).join(''):'<p class="muted">ابھی کوئی طالب علم درج نہیں۔ نیچے "+" دبائیں۔</p>')+'<button class="p fab" id="add">+ نیا طالب علم</button>';
+}
+function vAtt(){
+  var c=classes();if(!aCls||c.indexOf(aCls)<0)aCls=c[0]||'';
+  var l=db.students.filter(function(s){return s.cls===aCls}),rec=db.att[aDate+'|'+aCls]||{};
+  if(!c.length)return'<p class="muted">پہلے طلبہ شامل کریں۔</p>';
+  return'<div class="grid"><select id="ac">'+c.map(function(x){return'<option'+(x===aCls?' selected':'')+'>'+esc(x)+'</option>'}).join('')+'</select><input type="date" id="ad" value="'+aDate+'"></div>'+
+  l.map(function(s){var r=rec[s.id]||'';return'<div class="card"><div>'+esc(s.name)+' <span class="muted">('+esc(s.roll)+')</span></div><div class="seg" data-s="'+s.id+'">'+[['P','حاضر'],['A','غیر حاضر'],['L','رخصت']].map(function(b){return'<button data-v="'+b[0]+'" class="'+(r===b[0]?b[0]:'')+'">'+b[1]+'</button>'}).join('')+'</div></div>'}).join('');
+}
+function vFee(){
+  var h=db.students.filter(function(s){return !fq.trim()||(s.name+' '+s.roll+' '+s.cls).toLowerCase().indexOf(fq.trim().toLowerCase())>=0}).map(function(s){var b=num(s.fee)-paid(s.id);return'<div class="card row" data-f="'+s.id+'"><div>'+esc(s.name)+'<div class="muted">کلاس: '+esc(s.cls)+' | کل فیس: '+num(s.fee)+'</div></div><b class="'+(b>0?'due':'ok')+'">'+(b>0?b:'ادا')+'</b></div>'}).join('')||'<p class="muted">پہلے طلبہ شامل کریں۔</p>';
+  var r=db.fees.slice(-15).reverse().map(function(f){var s=stu(f.sid);return'<div class="card row"><span>'+esc(s?s.name:'—')+' <span class="muted">'+esc(f.date)+' '+esc(f.note)+'</span></span><span><b>'+f.amt+'</b> <button class="s d" data-rd="'+f.id+'">حذف</button></span></div>'}).join('');
+  return'<input id="fq" placeholder="نام یا رول نمبر سے تلاش" value="'+esc(fq)+'">'+h+(r?'<h4>حالیہ رسیدیں</h4>'+r:'');
+}
+function vRes(){
+  var l=db.marks.filter(function(x){var s=stu(x.sid);return !rq.trim()||(x.exam+' '+x.sub+' '+(s?s.name+' '+s.roll:'')).toLowerCase().indexOf(rq.trim().toLowerCase())>=0}).slice().reverse();
+  return'<input id="rq" placeholder="نام، رول نمبر، امتحان یا مضمون سے تلاش" value="'+esc(rq)+'">'+(l.length?l.map(function(x){var s=stu(x.sid);return'<div class="card row" data-m="'+x.id+'"><div>'+esc(s?s.name:'—')+'<div class="muted">'+esc(x.exam)+' | '+esc(x.sub)+'</div></div><b>'+x.got+'/'+x.tot+' ('+(x.tot?Math.round(x.got*100/x.tot):0)+'%)</b></div>'}).join(''):'<p class="muted">کوئی نتیجہ درج نہیں۔</p>')+'<button class="p fab" id="addr">+ نتیجہ</button>';
+}
+function stuForm(s){
+  var F=[{k:'name',l:'نام'},{k:'father',l:'والد کا نام'},{k:'cls',l:'کلاس'},{k:'roll',l:'رول نمبر'},{k:'phone',l:'فون نمبر',t:'tel'},{k:'fee',l:'کل فیس',t:'number'}];
+  modal(s?'طالب علم میں ترمیم':'نیا طالب علم',F,s,function(o){
+    if(!o.name||!o.cls){toast('نام اور کلاس ضروری ہیں');return false}
+    if(s)Object.assign(s,o);else{o.id=uid();db.students.push(o)}
+    save();toast('محفوظ ہو گیا')},
+    s?{l:'حذف کریں',f:function(){db.students=db.students.filter(function(x){return x.id!==s.id});db.fees=db.fees.filter(function(x){return x.sid!==s.id});db.marks=db.marks.filter(function(x){return x.sid!==s.id});save()}}:null);
+}
+
+function sheet(h){$('#o').innerHTML='<div class="mask"><div class="sheet">'+h+'</div></div>'}
+function settingsForm(){
+  var S=db.settings,logo=S.logo||'';
+  sheet('<h3>ادارے کی معلومات</h3><label>ادارے کا نام</label><input id="sn" value="'+esc(S.name)+'"><label>لوگو (اختیاری)</label><div class="row"><img id="sl" alt="" style="width:64px;height:64px;object-fit:contain;border:1px solid var(--line);border-radius:8px;'+(logo?'':'display:none')+'" src="'+esc(logo)+'"><input id="sf" type="file" accept="image/*"></div><div class="row" style="margin-top:12px"><button class="p" id="ss">محفوظ کریں</button><button class="s" id="sx">لوگو ہٹائیں</button><button class="s" id="mc">بند کریں</button></div>');
+  $('#mc').onclick=close;
+  $('#sx').onclick=function(){logo='';$('#sl').style.display='none'};
+  $('#sf').onchange=function(){var f=this.files&&this.files[0];if(!f)return;
+    var r=new FileReader();r.onerror=function(){toast('تصویر نہیں کھل سکی')};
+    r.onload=function(){var im=new Image();im.onerror=function(){toast('تصویر درست نہیں')};
+      im.onload=function(){var m=192,k=Math.min(1,m/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*k));c.height=Math.max(1,Math.round(im.height*k));c.getContext('2d').drawImage(im,0,0,c.width,c.height);logo=c.toDataURL('image/png');var e=$('#sl');e.src=logo;e.style.display=''};
+      im.src=r.result};r.readAsDataURL(f)};
+  $('#ss').onclick=function(){var n=$('#sn').value.trim();if(!n){toast('ادارے کا نام لکھیں');return}db.settings={name:n,logo:logo};save();toast('محفوظ ہو گیا');close()};
+}
+function profile(s){
+  var P=0,A=0,L=0,k,r;
+  for(k in db.att){if(k.slice(11)!==s.cls)continue;r=db.att[k][s.id];if(r==='P')P++;else if(r==='A')A++;else if(r==='L')L++}
+  var tot=P+A+L,bal=num(s.fee)-paid(s.id);
+  var fe=db.fees.filter(function(f){return f.sid===s.id}).map(function(f){return'<div class="row muted"><span>'+esc(f.date)+' '+esc(f.note)+'</span><span>'+f.amt+'</span></div>'}).join('');
+  var re=db.marks.filter(function(x){return x.sid===s.id}).map(function(x){return'<div class="row muted"><span>'+esc(x.exam)+' | '+esc(x.sub)+'</span><span>'+x.got+'/'+x.tot+'</span></div>'}).join('');
+  sheet('<h3>'+esc(s.name)+'</h3><div class="muted">ولدیت: '+esc(s.father)+'<br>کلاس: '+esc(s.cls)+' | رول نمبر: '+esc(s.roll)+'<br>فون: '+esc(s.phone||'—')+'</div>'+
+    '<div class="card"><b>حاضری</b><br>حاضر '+P+' | غیر حاضر '+A+' | رخصت '+L+(tot?' | '+Math.round(P*100/tot)+'%':'')+'</div>'+
+    '<div class="card"><b>فیس</b><br>کل '+num(s.fee)+' | ادا '+paid(s.id)+' | باقی <span class="'+(bal>0?'due':'ok')+'">'+Math.max(0,bal)+'</span>'+fe+'</div>'+
+    '<div class="card"><b>نتائج</b>'+(re||'<div class="muted">کوئی نتیجہ نہیں</div>')+'</div>'+
+    '<div class="row"><button class="p" id="pe">ترمیم</button><button class="s" id="mc">بند کریں</button></div>');
+  $('#mc').onclick=close;$('#pe').onclick=function(){$('#o').innerHTML='';stuForm(s)};
+}
+function sh(id,set){var el=$('#'+id);if(!el)return;el.oninput=function(){set(el.value);var p=el.selectionStart;render();var n=$('#'+id);n.focus();try{n.setSelectionRange(p,p)}catch(x){}}}
+function bind(){
+  var e;
+  sh('q',function(v){q=v});sh('rq',function(v){rq=v});sh('fq',function(v){fq=v});
+  if(e=$('#add'))e.onclick=function(){stuForm()};
+  document.querySelectorAll('[data-e]').forEach(function(c){c.onclick=function(){profile(stu(c.dataset.e))}});
+  if(e=$('#ac'))e.onchange=function(){aCls=this.value;render()};
+  if(e=$('#ad'))e.onchange=function(){aDate=this.value||today();render()};
+  document.querySelectorAll('.seg').forEach(function(g){g.querySelectorAll('button').forEach(function(b){b.onclick=function(){var k=aDate+'|'+aCls;db.att[k]=db.att[k]||{};db.att[k][g.dataset.s]=b.dataset.v;save();render()}})});
+  document.querySelectorAll('[data-f]').forEach(function(c){c.onclick=function(){var s=stu(c.dataset.f);
+    modal('فیس وصول کریں: '+s.name,[{k:'amt',l:'رقم',t:'number'},{k:'date',l:'تاریخ',t:'date'},{k:'note',l:'تفصیل (اختیاری)'}],{date:today()},function(o){
+      var a=num(o.amt);if(a<=0){toast('درست رقم لکھیں');return false}
+      db.fees.push({id:uid(),sid:s.id,amt:a,date:o.date||today(),note:o.note});save();toast('رسید درج ہو گئی')})}});
+  document.querySelectorAll('[data-rd]').forEach(function(b){b.onclick=function(){if(confirm('یہ رسید حذف کریں؟')){db.fees=db.fees.filter(function(f){return f.id!==b.dataset.rd});save();render()}}});
+  if(e=$('#addr'))e.onclick=function(){resForm()};
+  document.querySelectorAll('[data-m]').forEach(function(c){c.onclick=function(){resForm(db.marks.filter(function(x){return x.id===c.dataset.m})[0])}});
+  if(e=$('#bk'))e.onclick=backup;
+  if(e=$('#st'))e.onclick=settingsForm;
+}
+function resForm(x){
+  if(!db.students.length){toast('پہلے طلبہ شامل کریں');return}
+  modal(x?'نتیجے میں ترمیم':'نیا نتیجہ',[{k:'sid',l:'طالب علم',t:'sel',o:db.students.map(function(s){return[s.id,s.name+' ('+s.cls+')']})},{k:'exam',l:'امتحان'},{k:'sub',l:'مضمون'},{k:'got',l:'حاصل نمبر',t:'number'},{k:'tot',l:'کل نمبر',t:'number'}],x,function(o){
+    var g=num(o.got),t=num(o.tot);if(!o.exam||!o.sub||t<=0||g<0||g>t){toast('معلومات درست لکھیں (حاصل نمبر کل سے زیادہ نہیں ہو سکتے)');return false}
+    o.got=g;o.tot=t;if(x)Object.assign(x,o);else{o.id=uid();db.marks.push(o)}save();toast('محفوظ ہو گیا')},
+    x?{l:'حذف کریں',f:function(){db.marks=db.marks.filter(function(m){return m.id!==x.id});save()}}:null);
+}
+function backup(){
+  modal('بیک اپ / بحالی',[{k:'js',l:'اس متن کو کہیں محفوظ کر لیں۔ بحال کرنے کے لیے پرانا متن یہاں پیسٹ کریں',t:'area'}],{js:JSON.stringify(db)},function(o){
+    try{var d=JSON.parse(o.js);if(!Array.isArray(d.students)||!Array.isArray(d.fees)||!Array.isArray(d.marks)||typeof d.att!=='object')throw 0;if(!confirm('موجودہ ڈیٹا کی جگہ یہ ڈیٹا بحال کریں؟'))return false;d.settings=(d.settings&&typeof d.settings==='object')?d.settings:{name:'',logo:''};db=d;save();toast('بحال ہو گیا')}catch(x){toast('متن درست نہیں');return false}});
+}
+render();
+if(!db.settings.name)setTimeout(settingsForm,300);
+})();
+</script>
+</body>
+</html>
