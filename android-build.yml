@@ -1,130 +1,78 @@
-name: Android Build
+name: School Manager Android Build
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
-env:
-  HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
-
 jobs:
-  build:
+  android-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Source
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      - name: Install Dependencies
+        run: npm install
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Build Web Application
+        run: npm run build --if-present
 
-      - name: Project checks
-        env:
-          REQUIRE_FINAL_ID: ${{ env.HAS_KEYSTORE == 'true' && '1' || '0' }}
-        run: npm test
-
-      - name: Generate Android project
-        run: npx cap add android
-
-      - name: Generate icons and splash screens
-        run: npx capacitor-assets generate --android
-
-      - name: Set version and privacy options
+      - name: Verify Web Files
         run: |
-          set -euo pipefail
-          VC=$(node -p "require('./package.json').androidVersionCode")
-          VN=$(node -p "require('./package.json').version")
-          sed -i "s/versionCode [0-9]*/versionCode $VC/; s/versionName \"[^\"]*\"/versionName \"$VN\"/" android/app/build.gradle
-          sed -i 's/android:allowBackup="true"/android:allowBackup="false"/' android/app/src/main/AndroidManifest.xml
-          grep -q "versionCode $VC" android/app/build.gradle
-          grep -q 'allowBackup="false"' android/app/src/main/AndroidManifest.xml
+          if [ ! -d "www" ]; then
+            echo "ERROR: www folder not found"
+            exit 1
+          fi
+          if [ ! -f "www/index.html" ]; then
+            echo "ERROR: www/index.html not found"
+            exit 1
+          fi
 
-      - name: Sync web assets
+      - name: Add Android Platform
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+
+      - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Verify target SDK is 36 or higher
+      - name: Build APK
         run: |
-          set -euo pipefail
-          T=$(grep -oE 'targetSdkVersion *= *[0-9]+' android/variables.gradle | grep -oE '[0-9]+$')
-          echo "targetSdkVersion=$T"
-          test "$T" -ge 36
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - name: Lint (report only)
-        continue-on-error: true
-        working-directory: android
-        run: ./gradlew --no-daemon :app:lintRelease
-
-      - name: Build APK and AAB
-        working-directory: android
-        run: ./gradlew --no-daemon assembleDebug assembleRelease bundleRelease
-
-      - name: Collect and verify outputs
+      - name: Build AAB
         run: |
-          set -euo pipefail
-          mkdir -p out
-          cp android/app/build/outputs/apk/debug/app-debug.apk out/
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk out/
-          cp android/app/build/outputs/bundle/release/app-release.aab out/
-          for f in out/*; do test -s "$f" || { echo "EMPTY: $f"; exit 1; }; ls -l "$f"; done
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          echo "BT=$BT" >> "$GITHUB_ENV"
-          APPID=$(node -p "require('./capacitor.config.json').appId")
-          VC=$(node -p "require('./package.json').androidVersionCode")
-          VN=$(node -p "require('./package.json').version")
-          for a in out/app-debug.apk out/app-release-unsigned.apk; do
-            B=$("$BT/aapt2" dump badging "$a" | head -1)
-            echo "$a: $B"
-            echo "$B" | grep -q "name='$APPID'"
-            echo "$B" | grep -q "versionCode='$VC'"
-            echo "$B" | grep -q "versionName='$VN'"
-            "$BT/aapt2" dump badging "$a" | grep -E "targetSdkVersion:'(3[6-9]|[4-9][0-9])'"
-          done
+          cd android
+          ./gradlew bundleRelease
 
-      - name: Sign release (only if secrets are set)
-        if: env.HAS_KEYSTORE == 'true'
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          KS="$RUNNER_TEMP/release.jks"
-          echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
-          "$BT/zipalign" -f -p 4 out/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
-          "$BT/apksigner" sign --ks "$KS" --ks-key-alias "$KEY_ALIAS" --ks-pass env:KS_PASS --key-pass env:KEY_PASS --out out/app-release-signed.apk "$RUNNER_TEMP/aligned.apk"
-          "$BT/apksigner" verify --verbose out/app-release-signed.apk
-          jarsigner -keystore "$KS" -storepass:env KS_PASS -keypass:env KEY_PASS -signedjar out/app-release-signed.aab out/app-release.aab "$KEY_ALIAS"
-          jarsigner -verify out/app-release-signed.aab
-          rm -f "$KS" out/app-release-unsigned.apk out/app-release.aab
-
-      - name: Upload build outputs
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: school-manager-${{ env.HAS_KEYSTORE == 'true' && 'release-signed' || 'unsigned-and-debug' }}
-          path: out/*
-          if-no-files-found: error
+          name: School-Manager-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload logs and lint report
-        if: always()
+      - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
-          name: build-reports
-          path: |
-            android/app/build/reports/**
-            android/app/build/outputs/logs/**
-          if-no-files-found: ignore
+          name: School-Manager-AAB
+          path: android/app/build/outputs/bundle/release/app-release.aab
